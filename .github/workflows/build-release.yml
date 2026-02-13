@@ -66,18 +66,27 @@ jobs:
 
       - name: Package
         run: |
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
+          cd engine && ./mach package
+          echo "=== Package output ==="
+          ls -lh obj-x86_64-pc-linux-gnu/dist/friday-*.tar.* 2>/dev/null || true
+          # Copy to /tmp with release naming
           VERSION="${{ inputs.version }}"
-          DIST="engine/obj-x86_64-pc-linux-gnu/dist"
-          TARBALL="friday-browser-${VERSION}-linux-x86_64.tar.gz"
-          tar -czf "/tmp/$TARBALL" -C "$DIST" .
-          ls -lh "/tmp/$TARBALL"
-          cp "/tmp/$TARBALL" /var/www/browser/downloads/ 2>/dev/null || true
+          PKG=$(ls obj-x86_64-pc-linux-gnu/dist/friday-*.linux-x86_64.tar.* 2>/dev/null | head -1)
+          if [ -n "$PKG" ]; then
+            EXT="${PKG##*.tar.}"
+            cp "$PKG" "/tmp/friday-browser-${VERSION}-linux-x86_64.tar.${EXT}"
+            ls -lh "/tmp/friday-browser-${VERSION}-linux-x86_64.tar.${EXT}"
+          else
+            echo "ERROR: No package found!"
+            exit 1
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: friday-linux-x86_64
-          path: /tmp/friday-browser-${{ inputs.version }}-linux-x86_64.tar.gz
+          path: /tmp/friday-browser-${{ inputs.version }}-linux-x86_64.tar.*
 
   # ════════════════════════════════════════
   # WINDOWS (self-hosted, cross-compile)
@@ -139,23 +148,52 @@ jobs:
 
       - name: Package
         run: |
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
+          export ZEN_CROSS_COMPILING=1
+          export SURFER_PLATFORM=win32
+          export SURFER_COMPAT=x86_64
+          export LIB="/root/.mozbuild/clang/lib/clang/20/lib/windows"
+          export MOZ_WINDOWS_RS_DIR="/root/navegador/core/engine/windows-0.62.2"
+          cd engine
+          export MOZ_OBJDIR=obj-x86_64-pc-windows-msvc
+          ./mach package
+          echo "=== Package output ==="
+          ls -lh obj-x86_64-pc-windows-msvc/dist/friday-*.{zip,exe} 2>/dev/null || true
+          ls -lh obj-x86_64-pc-windows-msvc/dist/install/sea/*.exe 2>/dev/null || true
+          # Copy to /tmp with release naming
           VERSION="${{ inputs.version }}"
-          DIST="engine/obj-x86_64-pc-windows-msvc/dist"
-          TARBALL="friday-browser-${VERSION}-windows-x86_64.tar.gz"
-          if [ -d "$DIST" ]; then
-            tar -czf "/tmp/$TARBALL" -C "$DIST" .
-            ls -lh "/tmp/$TARBALL"
-          else
-            echo "Build output directory not found: $DIST"
-            ls engine/obj-*/dist/ 2>/dev/null || echo "No dist directories found"
+          # ZIP
+          ZIP=$(ls obj-x86_64-pc-windows-msvc/dist/friday-*.win64.zip 2>/dev/null | head -1)
+          if [ -n "$ZIP" ]; then
+            cp "$ZIP" "/tmp/friday-browser-${VERSION}-windows-x86_64.zip"
+            ls -lh "/tmp/friday-browser-${VERSION}-windows-x86_64.zip"
+          fi
+          # Installer
+          EXE=$(ls obj-x86_64-pc-windows-msvc/dist/friday-*.win64.installer.exe 2>/dev/null | head -1)
+          if [ -n "$EXE" ]; then
+            cp "$EXE" "/tmp/friday-browser-${VERSION}-windows-x86_64-installer.exe"
+            ls -lh "/tmp/friday-browser-${VERSION}-windows-x86_64-installer.exe"
+          fi
+          # Check at least zip exists
+          if [ -z "$ZIP" ] && [ -z "$EXE" ]; then
+            echo "ERROR: No Windows package found!"
+            ls obj-x86_64-pc-windows-msvc/dist/ 2>/dev/null | head -20
             exit 1
           fi
 
-      - name: Upload artifact
+      - name: Upload zip
         uses: actions/upload-artifact@v4
         with:
-          name: friday-windows-x86_64
-          path: /tmp/friday-browser-${{ inputs.version }}-windows-x86_64.tar.gz
+          name: friday-windows-x86_64-zip
+          path: /tmp/friday-browser-${{ inputs.version }}-windows-x86_64.zip
+          if-no-files-found: warn
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: friday-windows-x86_64-installer
+          path: /tmp/friday-browser-${{ inputs.version }}-windows-x86_64-installer.exe
+          if-no-files-found: warn
 
   # ════════════════════════════════════════
   # macOS (GitHub cloud, macos-26 runner)
@@ -223,24 +261,55 @@ jobs:
         timeout-minutes: 180
 
       - name: Package
+        env:
+          SURFER_PLATFORM: darwin
+          SURFER_COMPAT: aarch64
         run: |
+          source $HOME/.cargo/env
+          cd engine && ./mach package
+          echo "=== Package output ==="
+          ls -lh obj-aarch64-apple-darwin/dist/friday-*.{dmg,tar.bz2,tar.gz} 2>/dev/null || true
+          # Copy to /tmp with release naming
           VERSION="${{ inputs.version }}"
-          DIST="engine/obj-aarch64-apple-darwin/dist"
-          TARBALL="friday-browser-${VERSION}-macos-aarch64.tar.gz"
-          if [ -d "$DIST" ]; then
-            tar -czf "/tmp/$TARBALL" -C "$DIST" .
-            ls -lh "/tmp/$TARBALL"
-          else
-            echo "Build output not found at $DIST"
-            find engine/obj-* -name "dist" -type d 2>/dev/null || echo "No dist dirs"
-            exit 1
+          # Try DMG first, then tar.bz2
+          DMG=$(ls obj-aarch64-apple-darwin/dist/friday-*.mac.dmg 2>/dev/null | head -1)
+          if [ -n "$DMG" ]; then
+            cp "$DMG" "/tmp/friday-browser-${VERSION}-macos-aarch64.dmg"
+            ls -lh "/tmp/friday-browser-${VERSION}-macos-aarch64.dmg"
+          fi
+          # Also grab tar.bz2 if it exists
+          TAR=$(ls obj-aarch64-apple-darwin/dist/friday-*.mac.tar.bz2 2>/dev/null | head -1)
+          if [ -n "$TAR" ]; then
+            cp "$TAR" "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.bz2"
+            ls -lh "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.bz2"
+          fi
+          # Fallback: any tar.gz from mach package
+          if [ -z "$DMG" ] && [ -z "$TAR" ]; then
+            FALLBACK=$(ls obj-aarch64-apple-darwin/dist/friday-*.tar.* 2>/dev/null | head -1)
+            if [ -n "$FALLBACK" ]; then
+              EXT="${FALLBACK#*.tar.}"
+              cp "$FALLBACK" "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.${EXT}"
+              ls -lh "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.${EXT}"
+            else
+              echo "ERROR: No macOS package found!"
+              ls obj-aarch64-apple-darwin/dist/ 2>/dev/null | head -20
+              exit 1
+            fi
           fi
 
-      - name: Upload artifact
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: friday-macos-aarch64
-          path: /tmp/friday-browser-${{ inputs.version }}-macos-aarch64.tar.gz
+          name: friday-macos-aarch64-dmg
+          path: /tmp/friday-browser-${{ inputs.version }}-macos-aarch64.dmg
+          if-no-files-found: warn
+
+      - name: Upload tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: friday-macos-aarch64-tar
+          path: /tmp/friday-browser-${{ inputs.version }}-macos-aarch64.tar.*
+          if-no-files-found: warn
 
   # ════════════════════════════════════════
   # RELEASE
@@ -257,10 +326,25 @@ jobs:
         with:
           path: artifacts
 
+      - name: List artifacts
+        run: find artifacts -type f | sort
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
           name: Friday Browser v${{ inputs.version }}
-          draft: true
+          draft: false
+          prerelease: true
+          body: |
+            ## Friday Browser v${{ inputs.version }}
+
+            Based on Firefox/Gecko ${{ env.FIREFOX_VERSION }}
+
+            ### Downloads
+            - **Windows**: `.zip` (portable) or `.exe` (installer)
+            - **macOS**: `.dmg` (Apple Silicon)
+            - **Linux**: `.tar.xz` (extract and run `./friday`)
+
+            Alpha release for testing.
           files: artifacts/**/*
