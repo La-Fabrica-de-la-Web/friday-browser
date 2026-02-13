@@ -105,3 +105,6 @@ ac_add_options MOZ_TELEMETRY_REPORTING=
 # Allow loading unsigned extensions
 export MOZ_REQUIRE_SIGNING=
 mk_add_options MOZ_REQUIRE_SIGNING=
+
+export LIB="/root/.mozbuild/clang/lib/clang/20/lib/windows"
+export MOZ_WINDOWS_RS_DIR="/root/navegador/core/engine/windows-0.62.2"
