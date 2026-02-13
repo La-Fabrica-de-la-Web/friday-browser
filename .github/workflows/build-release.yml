@@ -55,12 +55,14 @@ jobs:
         run: |
           export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
           npm install
+          npx surfer ci --brand release
           npx surfer import || true
           ls engine/modules/libpref/init/zen-static-prefs.inc
 
       - name: Build
         run: |
           export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
+          export ZEN_RELEASE=1
           npx surfer build
         timeout-minutes: 120
 
@@ -70,7 +72,6 @@ jobs:
           cd engine && ./mach package
           echo "=== Package output ==="
           ls -lh obj-x86_64-pc-linux-gnu/dist/friday-*.tar.* 2>/dev/null || true
-          # Copy to /tmp with release naming
           VERSION="${{ inputs.version }}"
           PKG=$(ls obj-x86_64-pc-linux-gnu/dist/friday-*.linux-x86_64.tar.* 2>/dev/null | head -1)
           if [ -n "$PKG" ]; then
@@ -129,6 +130,7 @@ jobs:
         run: |
           export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
           npm install
+          npx surfer ci --brand release
           export SURFER_COMPAT=x86_64
           npx surfer import || true
 
@@ -160,21 +162,17 @@ jobs:
           echo "=== Package output ==="
           ls -lh obj-x86_64-pc-windows-msvc/dist/friday-*.{zip,exe} 2>/dev/null || true
           ls -lh obj-x86_64-pc-windows-msvc/dist/install/sea/*.exe 2>/dev/null || true
-          # Copy to /tmp with release naming
           VERSION="${{ inputs.version }}"
-          # ZIP
           ZIP=$(ls obj-x86_64-pc-windows-msvc/dist/friday-*.win64.zip 2>/dev/null | head -1)
           if [ -n "$ZIP" ]; then
             cp "$ZIP" "/tmp/friday-browser-${VERSION}-windows-x86_64.zip"
             ls -lh "/tmp/friday-browser-${VERSION}-windows-x86_64.zip"
           fi
-          # Installer
           EXE=$(ls obj-x86_64-pc-windows-msvc/dist/friday-*.win64.installer.exe 2>/dev/null | head -1)
           if [ -n "$EXE" ]; then
             cp "$EXE" "/tmp/friday-browser-${VERSION}-windows-x86_64-installer.exe"
             ls -lh "/tmp/friday-browser-${VERSION}-windows-x86_64-installer.exe"
           fi
-          # Check at least zip exists
           if [ -z "$ZIP" ] && [ -z "$EXE" ]; then
             echo "ERROR: No Windows package found!"
             ls obj-x86_64-pc-windows-msvc/dist/ 2>/dev/null | head -20
@@ -241,6 +239,7 @@ jobs:
         run: |
           source $HOME/.cargo/env
           npm ci
+          npx surfer ci --brand release
           npm run download
           npm run import -- --verbose || true
           cd engine
@@ -269,27 +268,22 @@ jobs:
           cd engine && ./mach package
           echo "=== Package output ==="
           ls -lh obj-aarch64-apple-darwin/dist/friday-*.{dmg,tar.bz2,tar.gz} 2>/dev/null || true
-          # Copy to /tmp with release naming
           VERSION="${{ inputs.version }}"
-          # Try DMG first, then tar.bz2
           DMG=$(ls obj-aarch64-apple-darwin/dist/friday-*.mac.dmg 2>/dev/null | head -1)
           if [ -n "$DMG" ]; then
             cp "$DMG" "/tmp/friday-browser-${VERSION}-macos-aarch64.dmg"
             ls -lh "/tmp/friday-browser-${VERSION}-macos-aarch64.dmg"
           fi
-          # Also grab tar.bz2 if it exists
           TAR=$(ls obj-aarch64-apple-darwin/dist/friday-*.mac.tar.bz2 2>/dev/null | head -1)
           if [ -n "$TAR" ]; then
             cp "$TAR" "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.bz2"
             ls -lh "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.bz2"
           fi
-          # Fallback: any tar.gz from mach package
           if [ -z "$DMG" ] && [ -z "$TAR" ]; then
             FALLBACK=$(ls obj-aarch64-apple-darwin/dist/friday-*.tar.* 2>/dev/null | head -1)
             if [ -n "$FALLBACK" ]; then
               EXT="${FALLBACK#*.tar.}"
               cp "$FALLBACK" "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.${EXT}"
-              ls -lh "/tmp/friday-browser-${VERSION}-macos-aarch64.tar.${EXT}"
             else
               echo "ERROR: No macOS package found!"
               ls obj-aarch64-apple-darwin/dist/ 2>/dev/null | head -20
