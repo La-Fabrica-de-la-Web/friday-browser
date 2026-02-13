@@ -131,6 +131,10 @@ jobs:
           export ZEN_CROSS_COMPILING=1
           export ZEN_RELEASE=1
           export ZEN_GA_DISABLE_PGO=1
+          CLANG_VER=$(ls /root/.mozbuild/clang/lib/clang/)
+          export LIB="/root/.mozbuild/clang/lib/clang/$CLANG_VER/lib/windows"
+          WINDOWS_RS_VERSION=$(cat build/windows/.windows-rs-version)
+          export MOZ_WINDOWS_RS_DIR="/root/navegador/core/engine/windows-$WINDOWS_RS_VERSION"
           ulimit -n 4096
           npm run build
         timeout-minutes: 180
@@ -202,8 +206,12 @@ jobs:
           npm run import -- --verbose || true
           cd engine
           export SURFER_PLATFORM="darwin"
-          ./mach --no-interactive bootstrap --application-choice browser --exclude macos-sdk || true
+          ./mach --no-interactive bootstrap --application-choice browser || true
           cd ..
+          # Show available SDKs
+          ls /Library/Developer/CommandLineTools/SDKs/ 2>/dev/null || true
+          ls /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/ 2>/dev/null || true
+          xcrun --show-sdk-path 2>/dev/null || true
 
       - name: Build
         run: |
@@ -212,6 +220,9 @@ jobs:
           export SURFER_COMPAT="aarch64"
           export ZEN_RELEASE=1
           export ZEN_GA_DISABLE_PGO=1
+          # Find the actual macOS SDK path
+          SDK_PATH=$(xcrun --show-sdk-path 2>/dev/null || echo "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
+          echo "Using SDK: $SDK_PATH"
           npm run build
         timeout-minutes: 120
 
@@ -221,6 +232,7 @@ jobs:
           export SURFER_PLATFORM="darwin"
           export SURFER_COMPAT="aarch64"
           export ZEN_RELEASE=1
+          export ZEN_GA_DISABLE_PGO=1
           npm run package || true
           VERSION="${{ inputs.version }}"
           if ls dist/*.dmg 1>/dev/null 2>&1; then
