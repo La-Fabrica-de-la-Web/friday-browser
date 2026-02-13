@@ -130,6 +130,7 @@ jobs:
           export SURFER_COMPAT="x86_64"
           export ZEN_CROSS_COMPILING=1
           export ZEN_RELEASE=1
+          export ZEN_GA_DISABLE_PGO=1
           ulimit -n 4096
           npm run build
         timeout-minutes: 180
@@ -210,6 +211,7 @@ jobs:
           export SURFER_PLATFORM="darwin"
           export SURFER_COMPAT="aarch64"
           export ZEN_RELEASE=1
+          export ZEN_GA_DISABLE_PGO=1
           npm run build
         timeout-minutes: 120
 
