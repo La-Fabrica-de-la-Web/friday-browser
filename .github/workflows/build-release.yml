@@ -208,10 +208,19 @@ jobs:
           export SURFER_PLATFORM="darwin"
           ./mach --no-interactive bootstrap --application-choice browser || true
           cd ..
-          # Show available SDKs
+          # Fix SDK path: symlink real SDK to expected paths
+          REAL_SDK=$(xcrun --show-sdk-path 2>/dev/null)
+          echo "Real SDK: $REAL_SDK"
           ls /Library/Developer/CommandLineTools/SDKs/ 2>/dev/null || true
-          ls /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/ 2>/dev/null || true
-          xcrun --show-sdk-path 2>/dev/null || true
+          # Create symlinks for any SDK version the build might expect
+          for expected in MacOSX26.2.sdk MacOSX26.1.sdk MacOSX26.0.sdk MacOSX25.sdk; do
+            target="/Library/Developer/CommandLineTools/SDKs/$expected"
+            if [ ! -e "$target" ] && [ -n "$REAL_SDK" ]; then
+              sudo ln -sf "$REAL_SDK" "$target" 2>/dev/null || true
+              echo "Symlinked $expected -> $REAL_SDK"
+            fi
+          done
+          ls -la /Library/Developer/CommandLineTools/SDKs/ 2>/dev/null || true
 
       - name: Build
         run: |
