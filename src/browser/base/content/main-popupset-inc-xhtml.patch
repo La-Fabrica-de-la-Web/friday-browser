@@ -1,0 +1,32 @@
+diff --git a/browser/base/content/main-popupset.inc.xhtml b/browser/base/content/main-popupset.inc.xhtml
+index 79b604c5965ba03762acbf085c9288c73001ec24..d75d5481e5de93c592850e39d4b0b4fd07e12678 100644
+--- a/browser/base/content/main-popupset.inc.xhtml
++++ b/browser/base/content/main-popupset.inc.xhtml
+@@ -226,6 +226,10 @@
+            hidden="true"
+            tabspecific="true"
+            aria-labelledby="editBookmarkPanelTitle">
++    <html:div id="zenEditBookmarkPanelFaviconContainer">
++      <html:img id="zenEditBookmarkPanelFavicon"/>
++    </html:div>
++    <vbox>
+       <box class="panel-header">
+         <html:h1>
+           <html:span id="editBookmarkPanelTitle"/>
+@@ -251,6 +255,7 @@
+                   class="footer-button"/>
+         </html:moz-button-group>
+       </vbox>
++    </vbox>
+     </panel>
+   </html:template>
+ 
+@@ -656,6 +661,8 @@
+ 
+ #include popup-notifications.inc.xhtml
+ 
++#include zen-popupset.inc.xhtml
++
+ #include ../../components/customizableui/content/panelUI.inc.xhtml
+ #include ../../components/controlcenter/content/identityPanel.inc.xhtml
+ #include ../../components/controlcenter/content/permissionPanel.inc.xhtml

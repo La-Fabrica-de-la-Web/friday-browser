@@ -1,0 +1,13 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 35e725043bce0b39fea550e8fb2b0ae1ff752e43..abac2042d537fcc1ce26e0e3acbf98fc2975b793 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -237,6 +237,8 @@ moz_asserts = { path = "mozglue/static/rust/moz_asserts" }
+ # Workaround for https://github.com/rust-lang/cargo/issues/11232
+ rure = { path = "third_party/rust/rure" }
+ 
++mime_guess = { path = "third_party/rust/mime_guess" }
++
+ # Patch `unicode-width` 0.1.* to 0.2.
+ unicode-width = { path = "build/rust/unicode-width" }
+ 

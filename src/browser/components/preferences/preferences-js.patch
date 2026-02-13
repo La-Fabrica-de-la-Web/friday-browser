@@ -1,0 +1,23 @@
+diff --git a/browser/components/preferences/preferences.js b/browser/components/preferences/preferences.js
+index 7d6835b8636f771943b8081b7d56f579812026c2..97227eec4baeffd39b23ed6194ce7fa108c3b862 100644
+--- a/browser/components/preferences/preferences.js
++++ b/browser/components/preferences/preferences.js
+@@ -124,6 +124,7 @@ ChromeUtils.defineLazyGetter(this, "gSubDialog", function () {
+       styleSheets: [
+         "chrome://browser/skin/preferences/dialog.css",
+         "chrome://browser/skin/preferences/preferences.css",
++        "chrome://browser/skin/preferences/zen-preferences.css",
+       ],
+       resizeCallback: async ({ title, frame }) => {
+         // Search within main document and highlight matched keyword.
+@@ -344,6 +345,10 @@ function init_all() {
+   register_module("paneSearch", gSearchPane);
+   register_module("panePrivacy", gPrivacyPane);
+   register_module("paneContainers", gContainersPane);
++  register_module("paneZenLooks", gZenLooksAndFeel);
++  register_module("paneZenTabManagement", gZenWorkspacesSettings);
++  register_module("paneZenCKS", gZenCKSSettings);
++  register_module("paneZenMarketplace", gZenMarketplaceManager);
+ 
+   for (let [id, config] of Object.entries(CONFIG_PANES)) {
+     SettingPaneManager.registerPane(id, config);

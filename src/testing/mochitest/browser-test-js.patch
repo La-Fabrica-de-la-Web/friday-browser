@@ -1,0 +1,30 @@
+diff --git a/testing/mochitest/browser-test.js b/testing/mochitest/browser-test.js
+index a687d271a91207f3e4a7b9afdf67031f8d9385d1..ebbf2e0cbf5e9eeca472c4c2a5963c290be8897d 100644
+--- a/testing/mochitest/browser-test.js
++++ b/testing/mochitest/browser-test.js
+@@ -442,10 +442,10 @@ Tester.prototype = {
+     // But not the Thunderbird window, it doesn't have these things!
+     if (AppConstants.MOZ_APP_NAME != "thunderbird") {
+       // Remove stale tabs
+-      if (this.currentTest && window.gBrowser && gBrowser.tabs.length > 1) {
++      if (this.currentTest && window.gBrowser && gBrowser.tabs.length > 2) {
+         let lastURI = "";
+         let lastURIcount = 0;
+-        while (gBrowser.tabs.length > 1) {
++        while (gBrowser.tabs.length > 2) {
+           let lastTab = gBrowser.tabs[gBrowser.tabs.length - 1];
+           if (!lastTab.closing) {
+             // Report the stale tab as an error only when they're not closing.
+@@ -480,12 +480,6 @@ Tester.prototype = {
+ 
+       // Replace the last tab with a fresh one
+       if (window.gBrowser) {
+-        gBrowser.addTab("about:blank", {
+-          skipAnimation: true,
+-          triggeringPrincipal:
+-            Services.scriptSecurityManager.getSystemPrincipal(),
+-        });
+-        gBrowser.removeTab(gBrowser.selectedTab, { skipPermitUnload: true });
+         gBrowser.stop();
+       }
+ 

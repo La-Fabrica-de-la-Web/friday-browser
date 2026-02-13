@@ -1,0 +1,38 @@
+diff --git a/browser/themes/shared/tabbrowser/content-area.css b/browser/themes/shared/tabbrowser/content-area.css
+index b00139d7af878326ff303c08d5ddd47501b8c7db..7361a5e98d6ea372f6fdc583d90044d276cfb81b 100644
+--- a/browser/themes/shared/tabbrowser/content-area.css
++++ b/browser/themes/shared/tabbrowser/content-area.css
+@@ -90,7 +90,6 @@
+   min-height: 0;
+ 
+   /* We want to be able to show the frame color behind the clipped radiused corner */
+-  background: var(--tabpanel-background-color);
+ 
+   /* stylelint-disable-next-line media-query-no-invalid */
+   @media -moz-pref("sidebar.revamp") {
+@@ -145,7 +144,6 @@
+   }
+ 
+   browser:is([blank], [pendingpaint]) {
+-    opacity: 0;
+   }
+ 
+   browser[type="content"] {
+@@ -392,7 +390,7 @@ split-view-footer {
+ 
+ .dialogStack {
+   z-index: var(--browser-stack-z-index-dialog-stack);
+-  position: absolute;
++  position: fixed;
+   inset: 0;
+ 
+   /* Hide tab-modal dialogs when a window-modal one is up. */
+@@ -553,7 +551,7 @@ split-view-footer {
+ 
+ .dialogOverlay[topmost="true"],
+ #window-modal-dialog::backdrop {
+-  background-color: var(--dialog-backdrop-color);
++  background-color: light-dark(rgba(255, 255, 255, .3), rgba(0, 0, 0, .3));
+ }
+ 
+ .dialogOverlay[hideContent="true"][topmost="true"] {

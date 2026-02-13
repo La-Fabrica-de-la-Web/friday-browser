@@ -1,0 +1,40 @@
+diff --git a/toolkit/themes/shared/in-content/common-shared.css b/toolkit/themes/shared/in-content/common-shared.css
+index c1acf2d6ab3c9a260e73d43af027f34a807e01dc..223afae5c36c98d3b09c001f91e07e90b0b0887a 100644
+--- a/toolkit/themes/shared/in-content/common-shared.css
++++ b/toolkit/themes/shared/in-content/common-shared.css
+@@ -63,7 +63,7 @@
+    * this in forced colors mode, as we should be using system colours then.
+    */
+   :root[dialogroot] {
+-    --background-color-canvas: #42414d;
++    --background-color-canvas: var(--zen-dialog-background);
+   }
+ }
+ 
+@@ -177,7 +177,7 @@ xul|menulist {
+   border-radius: var(--button-border-radius);
+   background-color: var(--button-background-color);
+   font-weight: normal;
+-  padding: 0.45em 1em;
++  padding: 0.7em 1em;
+   text-decoration: none;
+   margin: 4px 8px;
+   /* Ensure font-size isn't overridden by widget styling (e.g. in forms.css) */
+@@ -696,7 +696,7 @@ html|*#categories[last-input-type="mouse"] > html|button.category:focus-visible
+   fill-opacity: 1;
+ }
+ 
+-@media (max-width: 830px) {
++@media (max-width: 130px) {
+   :root {
+     --in-content-sidebar-width: 118px;
+   }
+@@ -1078,7 +1078,7 @@ xul|*.sidebar-footer-link {
+   user-select: none;
+ }
+ 
+-@media (max-width: 830px) {
++@media (max-width: 130px) {
+   .sidebar-footer-list {
+     margin-inline-start: 40px;
+     align-items: flex-start;
