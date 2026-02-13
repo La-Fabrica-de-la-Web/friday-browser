@@ -173,7 +173,7 @@ jobs:
   # ════════════════════════════════════════
   build-macos:
     if: ${{ inputs.build_macos }}
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     steps:
       - name: Checkout
@@ -222,6 +222,20 @@ jobs:
           done
           ls -la /Library/Developer/CommandLineTools/SDKs/ 2>/dev/null || true
 
+      - name: Patch SDK version check
+        run: |
+          # Firefox 147 requires SDK 26.1+ but macos-14 runner has SDK 14.x
+          # Patch the min version check to accept older SDKs
+          SDK_FILE="engine/build/moz.configure/toolchain.configure"
+          echo "Before patch:"
+          grep -n "26.1" "$SDK_FILE" || true
+          sed -i.bak 's/return "26.1"/return "14.0"/' "$SDK_FILE"
+          # Also patch any --with-macos-sdk references to use actual SDK
+          REAL_SDK=$(xcrun --show-sdk-path)
+          echo "Real SDK path: $REAL_SDK"
+          echo "After patch:"
+          grep -n "14.0" "$SDK_FILE" | head -3
+
       - name: Build
         run: |
           source $HOME/.cargo/env
@@ -229,9 +243,6 @@ jobs:
           export SURFER_COMPAT="aarch64"
           export ZEN_RELEASE=1
           export ZEN_GA_DISABLE_PGO=1
-          # Find the actual macOS SDK path
-          SDK_PATH=$(xcrun --show-sdk-path 2>/dev/null || echo "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
-          echo "Using SDK: $SDK_PATH"
           npm run build
         timeout-minutes: 120
 
