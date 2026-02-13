@@ -85,7 +85,7 @@ jobs:
   build-windows:
     if: ${{ inputs.build_windows }}
     runs-on: [self-hosted, linux, x64, friday-build]
-    timeout-minutes: 240
+    timeout-minutes: 180
     env:
       HOME: /root
     defaults:
@@ -98,9 +98,12 @@ jobs:
         run: |
           export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
           echo "Node: $(node --version) | Rust: $(rustc --version)"
-          echo "Wine: $(ls /root/win-cross/wine/bin/wine 2>&1)"
-          echo "VS2022: $(ls /root/win-cross/vs2022/VC/ 2>&1 | head -3)"
-          rustup target list --installed | grep windows && echo "Rust Windows target: OK"
+          echo "Wine: $(/root/win-cross/wine/bin/wine64 --version 2>/dev/null || echo 'not found')"
+          echo "VS2022 MSVC: $(ls /root/win-cross/vs2022/VC/Tools/MSVC/)"
+          echo "Windows SDK: $(ls /root/win-cross/vs2022/Windows\ Kits/10/Lib/)"
+          ls /root/navegador/core/engine/windows-0.62.2/ > /dev/null && echo "windows-rs 0.62.2: ready"
+          ls /root/.mozbuild/clang/lib/clang/20/lib/windows/ > /dev/null && echo "Clang windows libs: ready"
+          rustup target list --installed | grep -q x86_64-pc-windows-msvc || rustup target add x86_64-pc-windows-msvc
 
       - name: Sync repo
         run: |
@@ -108,167 +111,136 @@ jobs:
           git fetch origin navegador/main && git reset --hard origin/navegador/main
           git log --oneline -1
 
-      - name: Prepare engine for Windows
+      - name: Clean Windows obj
         run: |
-          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
-          export SURFER_COMPAT=x86_64
-          npm install
-          npx surfer import --verbose || true
-          dos2unix configs/windows/mozconfig 2>/dev/null || true
+          rm -rf engine/obj-x86_64-pc-windows-msvc 2>/dev/null || true
+          echo "Cleaned previous Windows build objects"
 
-      - name: Bootstrap for Windows
+      - name: Prepare engine
         run: |
           export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
-          export SURFER_PLATFORM="win32"
-          chmod -R +x ~/win-cross/vs2022 2>/dev/null || true
-          npx surfer bootstrap || true
+          npm install
+          export SURFER_COMPAT=x86_64
+          npx surfer import || true
 
       - name: Build for Windows
         run: |
           export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
-          export SURFER_PLATFORM="win32"
-          export SURFER_COMPAT="x86_64"
           export ZEN_CROSS_COMPILING=1
-          export ZEN_RELEASE=1
+          export SURFER_PLATFORM=win32
+          export SURFER_COMPAT=x86_64
           export ZEN_GA_DISABLE_PGO=1
-          CLANG_VER=$(ls /root/.mozbuild/clang/lib/clang/)
-          export LIB="/root/.mozbuild/clang/lib/clang/$CLANG_VER/lib/windows"
-          WINDOWS_RS_VERSION=$(cat build/windows/.windows-rs-version)
-          export MOZ_WINDOWS_RS_DIR="/root/navegador/core/engine/windows-$WINDOWS_RS_VERSION"
-          ulimit -n 4096
-          npm run build
-        timeout-minutes: 180
-
-      - name: Package Windows
-        run: |
-          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
-          export SURFER_PLATFORM="win32"
-          export SURFER_COMPAT="x86_64"
-          export ZEN_CROSS_COMPILING=1
+          export LIB="/root/.mozbuild/clang/lib/clang/20/lib/windows"
+          export MOZ_WINDOWS_RS_DIR="/root/navegador/core/engine/windows-0.62.2"
           export ZEN_RELEASE=1
-          npm run package || true
-          VERSION="${{ inputs.version }}"
-          # Zen packages as .zip, rename for our release
-          if ls dist/*.zip 1>/dev/null 2>&1; then
-            mv dist/*.zip "/tmp/friday-browser-${VERSION}-windows-x86_64.zip"
-          elif [ -d "engine/obj-x86_64-pc-windows-msvc/dist" ]; then
-            cd engine/obj-x86_64-pc-windows-msvc/dist
-            zip -r "/tmp/friday-browser-${VERSION}-windows-x86_64.zip" . -x "*.pdb"
-            cd /root/navegador/core
-          fi
-          # Also grab installer if it exists
-          if ls dist/*.exe 1>/dev/null 2>&1; then
-            cp dist/*.exe "/tmp/friday-browser-${VERSION}-windows-setup.exe"
-          fi
-          ls -lh /tmp/friday-browser-${VERSION}-windows-* 2>/dev/null || echo "No Windows artifacts found"
+          ulimit -n 4096
+          npx surfer build
+        timeout-minutes: 120
 
-      - name: Upload Windows artifact
+      - name: Package
+        run: |
+          VERSION="${{ inputs.version }}"
+          DIST="engine/obj-x86_64-pc-windows-msvc/dist"
+          TARBALL="friday-browser-${VERSION}-windows-x86_64.tar.gz"
+          if [ -d "$DIST" ]; then
+            tar -czf "/tmp/$TARBALL" -C "$DIST" .
+            ls -lh "/tmp/$TARBALL"
+          else
+            echo "Build output directory not found: $DIST"
+            ls engine/obj-*/dist/ 2>/dev/null || echo "No dist directories found"
+            exit 1
+          fi
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: friday-windows-x86_64
-          path: /tmp/friday-browser-${{ inputs.version }}-windows-*
+          path: /tmp/friday-browser-${{ inputs.version }}-windows-x86_64.tar.gz
 
   # ════════════════════════════════════════
-  # macOS (GitHub cloud runner)
+  # macOS (GitHub cloud, macos-26 runner)
   # ════════════════════════════════════════
   build-macos:
     if: ${{ inputs.build_macos }}
-    runs-on: macos-15
-    timeout-minutes: 180
+    runs-on: macos-26
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: ".nvmrc"
 
-      - name: Install system deps
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Setup Git
+        run: |
+          git config --global user.email "ci@fridaybrowser.app"
+          git config --global user.name "Friday CI"
+
+      - name: Install system dependencies
         run: |
           brew update
           brew install cairo gnu-tar mercurial
-          echo 'export PATH="/usr/local/opt/gnu-tar/libexec/gnubin:$PATH"' >> ~/.bash_profile
-          source ~/.bash_profile 2>/dev/null || true
+          sudo pip install setuptools
+          brew uninstall --ignore-dependencies python3.12 -f || true
 
-      - name: Setup Rust
+      - name: Install Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain $(cat .rust-toolchain 2>/dev/null || echo "stable")
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain $(cat .rust-toolchain)
           source $HOME/.cargo/env
           rustup target add aarch64-apple-darwin
+          rustup target add x86_64-apple-darwin
 
       - name: Install + Download + Import + Bootstrap
+        env:
+          SURFER_COMPAT: aarch64
         run: |
           source $HOME/.cargo/env
           npm ci
           npm run download
-          export SURFER_COMPAT=aarch64
           npm run import -- --verbose || true
           cd engine
           export SURFER_PLATFORM="darwin"
           ./mach --no-interactive bootstrap --application-choice browser || true
           cd ..
-          # Fix SDK path: symlink real SDK to expected paths
-          REAL_SDK=$(xcrun --show-sdk-path 2>/dev/null)
-          echo "Real SDK: $REAL_SDK"
-          ls /Library/Developer/CommandLineTools/SDKs/ 2>/dev/null || true
-          # Create symlinks for any SDK version the build might expect
-          for expected in MacOSX26.2.sdk MacOSX26.1.sdk MacOSX26.0.sdk MacOSX25.sdk; do
-            target="/Library/Developer/CommandLineTools/SDKs/$expected"
-            if [ ! -e "$target" ] && [ -n "$REAL_SDK" ]; then
-              sudo ln -sf "$REAL_SDK" "$target" 2>/dev/null || true
-              echo "Symlinked $expected -> $REAL_SDK"
-            fi
-          done
-          ls -la /Library/Developer/CommandLineTools/SDKs/ 2>/dev/null || true
-
-      - name: Patch SDK version check
-        run: |
-          # Firefox 147 requires SDK 26.1+ but macos-14 runner has SDK 14.x
-          # Patch the min version check to accept older SDKs
-          SDK_FILE="engine/build/moz.configure/toolchain.configure"
-          echo "Before patch:"
-          grep -n "26.1" "$SDK_FILE" || true
-          sed -i.bak 's/return "26.1"/return "14.0"/' "$SDK_FILE"
-          # Also patch any --with-macos-sdk references to use actual SDK
-          REAL_SDK=$(xcrun --show-sdk-path)
-          echo "Real SDK path: $REAL_SDK"
-          echo "After patch:"
-          grep -n "14.0" "$SDK_FILE" | head -3
 
       - name: Build
+        env:
+          SURFER_PLATFORM: darwin
+          SURFER_COMPAT: aarch64
+          ZEN_GA_DISABLE_PGO: "1"
         run: |
           source $HOME/.cargo/env
-          export SURFER_PLATFORM="darwin"
-          export SURFER_COMPAT="aarch64"
+          ulimit -n 4096
           export ZEN_RELEASE=1
-          export ZEN_GA_DISABLE_PGO=1
           npm run build
-        timeout-minutes: 120
+        timeout-minutes: 180
 
-      - name: Package DMG
+      - name: Package
         run: |
-          source $HOME/.cargo/env
-          export SURFER_PLATFORM="darwin"
-          export SURFER_COMPAT="aarch64"
-          export ZEN_RELEASE=1
-          export ZEN_GA_DISABLE_PGO=1
-          npm run package || true
           VERSION="${{ inputs.version }}"
-          if ls dist/*.dmg 1>/dev/null 2>&1; then
-            mv dist/*.dmg "friday-browser-${VERSION}-macos-arm64.dmg"
-          elif [ -d "engine/obj-aarch64-apple-darwin/dist" ]; then
-            hdiutil create -volname "Friday Browser" \
-              -srcfolder "engine/obj-aarch64-apple-darwin/dist/Friday Browser.app" \
-              -ov -format UDZO "friday-browser-${VERSION}-macos-arm64.dmg" || true
+          DIST="engine/obj-aarch64-apple-darwin/dist"
+          TARBALL="friday-browser-${VERSION}-macos-aarch64.tar.gz"
+          if [ -d "$DIST" ]; then
+            tar -czf "/tmp/$TARBALL" -C "$DIST" .
+            ls -lh "/tmp/$TARBALL"
+          else
+            echo "Build output not found at $DIST"
+            find engine/obj-* -name "dist" -type d 2>/dev/null || echo "No dist dirs"
+            exit 1
           fi
-          ls -lh friday-browser-*.dmg 2>/dev/null || echo "DMG not created"
 
-      - name: Upload macOS artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: friday-macos-arm64
-          path: "*.dmg"
+          name: friday-macos-aarch64
+          path: /tmp/friday-browser-${{ inputs.version }}-macos-aarch64.tar.gz
 
   # ════════════════════════════════════════
   # RELEASE
@@ -280,41 +252,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/
-
-      - name: List artifacts
-        run: find artifacts/ -type f -ls
-
-      - name: Delete existing release
-        run: gh release delete v${{ inputs.version }} --yes --repo ${{ github.repository }} 2>/dev/null || true
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Delete existing tag
-        run: git push --delete origin v${{ inputs.version }} 2>/dev/null || true
+          path: artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
           name: Friday Browser v${{ inputs.version }}
-          draft: false
-          prerelease: true
+          draft: true
           files: artifacts/**/*
-          body: |
-            ## Friday Browser v${{ inputs.version }}
-
-            Based on Firefox/Gecko 147.0.3
-
-            ### Downloads
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | Linux x86_64 | `.tar.gz` | Extract and run `./friday` |
-            | Windows x86_64 | `.zip` / `.exe` | Extract or run installer |
-            | macOS ARM64 | `.dmg` | Unsigned — right-click → Open |
-
-            ### Notes
-            Alpha release for testing.
