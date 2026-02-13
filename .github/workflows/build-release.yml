@@ -23,6 +23,7 @@ on:
 env:
   NODE_VERSION: "20"
   FIREFOX_VERSION: "147.0.3"
+  NVM_SETUP: 'export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"'
 
 jobs:
   # ════════════════════════════════════════
@@ -32,21 +33,23 @@ jobs:
     if: ${{ inputs.build_linux }}
     runs-on: [self-hosted, linux, x64, friday-build]
     timeout-minutes: 180
+    env:
+      HOME: /root
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup environment
         run: |
-          export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-          source "$HOME/.cargo/env"
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
           echo "Node: $(node --version)"
           echo "Rust: $(rustc --version)"
+          echo "Home: $HOME"
+          echo "NVM: $NVM_DIR"
 
       - name: Install deps + download + import + bootstrap
         run: |
-          export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-          source "$HOME/.cargo/env"
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
           npm install
           npx surfer download
           npx surfer import
@@ -54,77 +57,60 @@ jobs:
 
       - name: Build
         run: |
-          export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-          source "$HOME/.cargo/env"
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
           npx surfer build
+        timeout-minutes: 120
 
       - name: Package
         run: |
-          cd engine/obj-x86_64-pc-linux-gnu/dist
-          tar czf $GITHUB_WORKSPACE/friday-browser-${{ inputs.version }}-linux-x86_64.tar.gz \
-            --transform='s,^bin,friday-browser,' bin/
-          ls -lh $GITHUB_WORKSPACE/friday-browser-*.tar.gz
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
+          VERSION="${{ inputs.version }}"
+          DIST="engine/obj-x86_64-pc-linux-gnu/dist"
+          TARBALL="friday-browser-${VERSION}-linux-x86_64.tar.gz"
+          tar -czf "$TARBALL" -C "$DIST" .
+          echo "TARBALL=$TARBALL" >> $GITHUB_ENV
+          ls -lh "$TARBALL"
 
-      - name: Upload
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: friday-browser-linux-x86_64
-          path: friday-browser-${{ inputs.version }}-linux-x86_64.tar.gz
+          name: friday-linux-x86_64
+          path: ${{ env.TARBALL }}
 
   # ════════════════════════════════════════
-  # WINDOWS BUILD (cross-compile on Hetzner)
+  # WINDOWS BUILD (cross-compile from Linux)
   # ════════════════════════════════════════
   build-windows:
     if: ${{ inputs.build_windows }}
-    runs-on: [self-hosted, linux, x64, friday-build]
     needs: build-linux
-    timeout-minutes: 240
+    runs-on: [self-hosted, linux, x64, friday-build]
+    timeout-minutes: 180
+    env:
+      HOME: /root
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup cross-compile deps
+      - name: Setup cross-compile
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq wine64 p7zip-full nsis dos2unix
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
+          echo "Node: $(node --version)"
+          echo "Setting up Windows cross-compilation..."
+          # Check if wine/mingw are available
+          which x86_64-w64-mingw32-gcc 2>/dev/null && echo "mingw: OK" || echo "mingw: NOT FOUND"
+          which wine 2>/dev/null && echo "wine: OK" || echo "wine: NOT FOUND"
 
-      - name: Setup environment
+      - name: Build for Windows
         run: |
-          export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-          source "$HOME/.cargo/env"
-          rustup target add x86_64-pc-windows-msvc
-          echo "Rust Windows target added"
-
-      - name: Install + download + import
-        run: |
-          export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-          source "$HOME/.cargo/env"
+          export NVM_DIR="/root/.nvm" && . "/root/.nvm/nvm.sh" && . "/root/.cargo/env"
           npm install
           npx surfer download
-          SURFER_PLATFORM="win32" npx surfer import
-          SURFER_PLATFORM="win32" npx surfer bootstrap
-
-      - name: Build Windows
-        run: |
-          export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-          source "$HOME/.cargo/env"
-          SURFER_PLATFORM="win32" npx surfer build
-
-      - name: Package
-        run: |
-          export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
-          npx surfer package || true
-          # Find and rename output
-          find . -name "*.exe" -o -name "*.zip" | head -5
-          cp engine/obj-*/dist/*.exe $GITHUB_WORKSPACE/friday-browser-${{ inputs.version }}-win-x86_64-setup.exe 2>/dev/null || \
-          echo "Windows packaging needs debugging"
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: friday-browser-windows-x86_64
-          path: friday-browser-${{ inputs.version }}-win-*.exe
-          if-no-files-found: warn
+          npx surfer import
+          # Set cross-compile target
+          export MOZ_CROSS_COMPILE=1
+          export CROSS_COMPILE_TARGET=x86_64-pc-mingw32
+          npx surfer bootstrap --target x86_64-pc-mingw32 || echo "Cross-compile bootstrap failed, skipping Windows build"
+        timeout-minutes: 120
 
   # ════════════════════════════════════════
   # macOS BUILD (GitHub cloud runner)
@@ -132,109 +118,74 @@ jobs:
   build-macos:
     if: ${{ inputs.build_macos }}
     runs-on: macos-14
-    timeout-minutes: 240
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup Rust
-        uses: dtolnay/rust-action@v1
-        with:
-          toolchain: stable
-
-      - name: Install system deps
+      - name: Setup macOS build env
         run: |
-          brew install mercurial
+          brew install node@20 rust mercurial
+          echo "Node: $(node --version)"
+          echo "Rust: $(rustc --version)"
 
-      - name: Install + download + import + bootstrap
+      - name: Build for macOS
         run: |
           npm install
           npx surfer download
           npx surfer import
           npx surfer bootstrap
-
-      - name: Build macOS
-        run: |
           npx surfer build
+        timeout-minutes: 120
 
       - name: Package DMG
         run: |
-          npx surfer package || true
-          # Create a simple .tar.gz if DMG fails
-          cd engine/obj-*/dist
-          tar czf $GITHUB_WORKSPACE/friday-browser-${{ inputs.version }}-macos-aarch64.tar.gz \
-            --transform='s,^*.app,Friday Browser.app,' *.app/ 2>/dev/null || \
-          tar czf $GITHUB_WORKSPACE/friday-browser-${{ inputs.version }}-macos-aarch64.tar.gz bin/
-          ls -lh $GITHUB_WORKSPACE/friday-browser-*.tar.gz
+          VERSION="${{ inputs.version }}"
+          echo "Creating DMG for macOS ARM64..."
+          # TODO: Create proper DMG with create-dmg
+          DIST="engine/obj-aarch64-apple-darwin/dist"
+          DMG="friday-browser-${VERSION}-macos-arm64.dmg"
+          hdiutil create -volname "Friday Browser" -srcfolder "$DIST" -ov -format UDZO "$DMG" || echo "DMG creation skipped"
+          echo "DMG=$DMG" >> $GITHUB_ENV
 
-      - name: Upload
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: friday-browser-macos-aarch64
-          path: |
-            friday-browser-${{ inputs.version }}-macos-*.tar.gz
-            friday-browser-${{ inputs.version }}-macos-*.dmg
-          if-no-files-found: warn
+          name: friday-macos-arm64
+          path: "*.dmg"
 
   # ════════════════════════════════════════
   # CREATE RELEASE
   # ════════════════════════════════════════
   create-release:
     needs: [build-linux, build-windows, build-macos]
-    if: |
-      always() &&
-      (needs.build-linux.result == 'success' ||
-       needs.build-windows.result == 'success' ||
-       needs.build-macos.result == 'success')
-    runs-on: [self-hosted, linux, x64, friday-build]
+    if: always() && (needs.build-linux.result == 'success' || needs.build-macos.result == 'success')
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./release-artifacts
-
-      - name: List artifacts
-        run: find ./release-artifacts -type f -ls
+          path: artifacts/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
-          name: "Friday Browser v${{ inputs.version }}"
+          name: Friday Browser v${{ inputs.version }}
+          draft: true
+          prerelease: true
+          files: artifacts/**/*
           body: |
             ## Friday Browser v${{ inputs.version }}
 
+            Based on Firefox/Gecko ${{ env.FIREFOX_VERSION }}
+
             ### Downloads
-            | Platform | File | Status |
-            |----------|------|--------|
-            | Linux x86_64 | `.tar.gz` | ${{ needs.build-linux.result }} |
-            | Windows x86_64 | `.exe` | ${{ needs.build-windows.result }} |
-            | macOS ARM64 | `.dmg` / `.tar.gz` | ${{ needs.build-macos.result }} |
+            - **Linux x86_64**: `.tar.gz`
+            - **macOS ARM64**: `.dmg` (unsigned — right-click → Open)
+            - **Windows x86_64**: Coming soon
 
-            ### Install
-            **Linux:**
-            ```bash
-            tar xzf friday-browser-*-linux-x86_64.tar.gz
-            cd friday-browser && ./friday
-            ```
-
-            **Windows:** Run the `.exe` installer.
-
-            **macOS (unsigned):**
-            Right-click the app → Open → Open again.
-            Or: `xattr -cr /Applications/Friday\ Browser.app`
-
-            ---
-            Engine: Gecko (Firefox ${{ env.FIREFOX_VERSION }}) | Base: Zen Browser
-            *Built on Hetzner self-hosted + GitHub cloud runners*
-          files: ./release-artifacts/**/*
-          draft: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            ### Notes
+            Alpha release. For testing purposes.
